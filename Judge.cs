@@ -57,11 +57,11 @@ namespace judge
             for (int i = 0; i < cases; i++)
             {
                 if (token.IsCancellationRequested) break;
-                var generator = await Executor.Execute(i, options.Generator, "", MbBytes * options.MemoryLimit, (int) options.TimeLimit * 1000, token);
+                var generator = await Executor.Execute(i, options.Generator, "", MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
                 if (token.IsCancellationRequested) break;
-                var refs = await Executor.Execute(i, options.Reference, generator.Output, MbBytes * options.MemoryLimit, (int) options.TimeLimit * 1000, token);
+                var refs = await Executor.Execute(i, options.Reference, generator.Output, MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
                 if (token.IsCancellationRequested) break;
-                var sol = await Executor.Execute(i, options.Solution, generator.Output, MbBytes * options.MemoryLimit, (int) options.TimeLimit * 1000, token);
+                var sol = await Executor.Execute(i, options.Solution, generator.Output, MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
                 Results.Add(new CaseResult()
                 {
                     g = generator,
