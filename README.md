@@ -1,45 +1,72 @@
 # Offline Judge
 
-Offline Judge is a program that compares the output of a `reference/slow` solution with a `fast` solution.
+Offline Judge is an advanced and configurable `fast/slow` grader that runs on your own computer!
 
 This is a common technique used in contests to validate the accuracy of a solution.
 
-Offline Judge can be used with the `judge` command.
+## Quick Start
 
-There are three main commands that Offline Judge offers, `judge run` runs the solutions and validates their output, `judge install` installs the program into `%APPDATA%\judge\judge.exe` and adds it to the `PATH` environment variable, `judge uninstall` deletes the program and removes its self from `PATH`
+### Before Starting:
 
-Here is an example of using judge:
+1. OJ requires `dotnetcore 3.1` to be installed, install [dotnet](https://dotnet.microsoft.com/download) if it is not installed already!
+2. Make sure you have a compiler that can run your desired solution
 
+### Setting Up: 
+
+- Download Judge from the `Releases` section for your platform.
+- **Windows Only (Optional)**: Run `judge.exe install` to install the application and add it to `PATH`
+- Create a `judge.yaml`, an example is shown below.
+- Modify the configuration to your heart's content.
+- To run the judge, open a terminal and execute `judge run`. Make sure the current working directory contains a `judge.yaml`, or specify the path to `judge.yaml` with `judge run <configuration file path>`
+
+### Example Configuration
+
+```yaml
+#
+# Offline Judge - Configuration File
+# https://github.com/encodeous/offlinejudge
+#
+
+# Commands that are run once before judging any cases
+pre-judge-commands:
+- command: cmd
+  arguments: --arguments here
+- command: cmd2
+  arguments: --arguments here
+# Should the output be shown?
+show-pre-judge-output: true
+# Should the judge stop judging with it hits a non-ac case? (The test data may get buried by cases in the console!)
+short-circuit: true
+# Number of cases the judge runs
+cases: 100
+# The max number of parallel executions that occur at any given time
+judge-threads: 3
+# Should the judge use an exact grader or a space-separated token grader?
+token-grader: false
+solution:
+  # Working directory for the executing process, leave blank for current directory
+  working-directory: 
+  # Filename or the full file path to the program
+  file-name: solution.exe
+  arguments: --arguments here
+  # Time limit in seconds
+  time-limit: 2.5
+  # Memory limit in MB
+  memory-limit: 512
+reference:
+  working-directory: 
+  file-name: reference.exe
+  arguments: --arguments here
+  time-limit: 2.5
+  memory-limit: 512
+generator:
+  working-directory: 
+  file-name: generator.exe
+  arguments: --arguments here
+  time-limit: 10
+  memory-limit: 1024
 ```
-judge run gen.exe sol.exe ref.exe -t 2.4
-```
 
-It also has many options as show below:
+### Uninstalling (Windows)
 
-```
-  -o, --output          Output cases as a file, and specify a path
-
-  -a, --ac              (Default: false) Output AC cases along with WA cases
-
-  -s, --shortcircuit    (Default: false) Short Circuit - Stop judging on non-AC
-
-  -m, --mem             (Default: 512) Memory Limit in Megabytes
-
-  -t, --time            (Default: 2) Time Limit in Seconds
-
-  -c, --cases           (Default: 10) Cases
-
-  -p, --parallel        (Default: 3) Parallel Judging Threads
-
-  --help                Display this help screen.
-
-  --version             Display version information.
-
-  value pos. 0          Required. Specify Generator Path, or command to run the Generator enclosed in quotations.
-
-  value pos. 1          Required. Solution Path, or command to run the Solution enclosed in quotations.
-
-  value pos. 2          Required. Reference Solution Path, or command to run the Reference Solution enclosed in
-                        quotations.
-```
-
+- Run `judge uninstall` and make sure judge is not running.

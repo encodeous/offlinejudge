@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -102,6 +103,11 @@ namespace judge
             Parser.Default.ParseArguments<JudgeOptions, InstallOptions, UninstallOptions>(args)
                 .WithParsed<InstallOptions>(o =>
                 {
+                    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    {
+                        Console.WriteLine("Install is only supported on Windows!");
+                        return;
+                    }
                     Console.WriteLine("Installing judge to AppData...");
                     if (Install())
                     {
@@ -115,6 +121,11 @@ namespace judge
                 })
                 .WithParsed<UninstallOptions>(o =>
                 {
+                    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    {
+                        Console.WriteLine("Uninstall is only supported on Windows!");
+                        return;
+                    }
                     if (!Uninstall())
                     {
                         Console.WriteLine("Failed uninstalling judge! Is it installed?");
