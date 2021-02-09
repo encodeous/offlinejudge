@@ -1,90 +1,47 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Text;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using CliWrap;
+using CliWrap.Buffered;
+using CliWrap.EventStream;
 
 namespace judge
 {
-    class Executor
+    static class Executor
     {
-        public static async Task<ExecutionResult> Execute(int id, string command, string input, long maxMemoryBytes, int maxTimeMs, CancellationToken ct)
+        public static Command CreateCommand(this ExecutionInfo info)
         {
-            ExecutionResult result = new ExecutionResult();
-            result.Id = id;
-            var info = new ProcessStartInfo("cmd.exe", "/C "+command)
-            {
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false
-            };
-            info.WorkingDirectory = Environment.CurrentDirectory;
-            var proc = new Process();
-            proc.StartInfo = info;
-            proc.Start();
-            var dt = DateTime.Now;
-            Task.Run(async () =>
-            {
-                await proc.StandardInput.WriteAsync(input);
-                await proc.StandardInput.FlushAsync();
-            });
+            return Cli.Wrap(info.FileName)
+                .WithArguments(info.Arguments)
+                .WithWorkingDirectory(info.WorkingDirectory);
+        }
+        public static async Task<ExecutionResult> ExecuteJudge(this Command cmd, ExecutionInfo einfo, CancellationToken token)
+        {
+            var val = await cmd.ExecuteLimitedAsync(einfo.MemoryLimit, TimeSpan.FromSeconds(einfo.TimeLimit), token).ConfigureAwait(false);
+            var result = new ExecutionResult();
 
-            while (!proc.HasExited)
-            {
-                proc.Refresh();
-                if (ct.IsCancellationRequested)
-                {
-                    proc.Kill();
-                    return new ExecutionResult()
-                    {
-                        Result = ExecutorResult.None
-                    };
-                }
-                if (DateTime.Now - dt > TimeSpan.FromMilliseconds(maxTimeMs))
-                {
-                    proc.Kill();
-                    result.Result = ExecutorResult.TLE;
-                    result.TimeMilliseconds = maxTimeMs;
-                    return result;
-                }
-
-                try
-                {
-                    result.MemoryBytes = Math.Max(result.MemoryBytes, proc.PrivateMemorySize64);
-                }
-                catch
-                {
-
-                }
-
-                if (result.MemoryBytes > maxMemoryBytes)
-                {
-                    proc.Kill();
-                    result.Result = ExecutorResult.MLE;
-                    result.TimeMilliseconds = (int)(DateTime.Now - dt).TotalMilliseconds;
-                    result.Output = await proc.StandardOutput.ReadToEndAsync();
-                    return result;
-                }
-                await Task.Delay(10);
-            }
-            var et = DateTime.Now;
-            if (proc.ExitCode != 0)
+            result.Result = ExecutorResult.None;
+            
+            if (val.ExitCode != 0)
             {
                 result.Result = ExecutorResult.RTE;
-                result.ExitCode = proc.ExitCode;
-                result.Output = await proc.StandardOutput.ReadToEndAsync();
             }
-            else
+
+            if (val.MemoryUsedMb >= einfo.MemoryLimit)
             {
-                result.Result = ExecutorResult.None;
+                result.Result = ExecutorResult.MLE;
             }
 
-            result.TimeMilliseconds = (int)(et - dt).TotalMilliseconds;
+            if (val.RunTime >= TimeSpan.FromSeconds(einfo.TimeLimit))
+            {
+                result.Result = ExecutorResult.TLE;
+            }
 
-            result.Output = await proc.StandardOutput.ReadToEndAsync();
+            result.TimeMilliseconds = (int)val.RunTime.TotalMilliseconds;
+            result.MemoryMb = val.MemoryUsedMb;
+            result.ExitCode = val.ExitCode;
             return result;
         }
     }

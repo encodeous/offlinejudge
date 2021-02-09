@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CliWrap;
 
 namespace judge
 {
@@ -15,39 +16,26 @@ namespace judge
     }
     public class Judge
     {
-        private static long MbBytes = 1024 * 1024;
-        private JudgeOptions options;
+        private JudgeConfig config;
         private ICustomGrader _grader;
-        private CancellationToken token;
+        private CancellationToken _token;
         private CancellationTokenSource source;
-        public Judge(JudgeOptions opt, ICustomGrader grader, CancellationToken ct, CancellationTokenSource cts)
+        public Judge(JudgeConfig cfg, ICustomGrader grader, CancellationToken ct, CancellationTokenSource cts)
         {
-            options = opt;
+            config = cfg;
             _grader = grader;
-            token = ct;
+            _token = ct;
             source = cts;
         }
 
         public void SaveData(int id, string scase, string refsol, string solsol)
         {
-            var cc = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            string k = $"CASE {id+1}\n" +
+            PrintColor($"CASE {id+1}\n" +
                        $"{scase}\n" +
                        $"REFERENCE SOLUTION\n" +
                        $"{refsol}\n" +
                        $"YOUR SOLUTION\n" +
-                       $"{solsol}\n";
-            if (options.Output != "")
-            {
-                File.AppendAllText(options.Output, k);
-            }
-            else
-            {
-                Console.WriteLine(k);
-            }
-
-            Console.ForegroundColor = cc;
+                       $"{solsol}\n", ConsoleColor.Cyan);
         }
 
         public ConcurrentBag<CaseResult> Results = new ConcurrentBag<CaseResult>();
@@ -56,17 +44,29 @@ namespace judge
         {
             for (int i = 0; i < cases; i++)
             {
-                if (token.IsCancellationRequested) break;
-                var generator = await Executor.Execute(i, options.Generator, "", MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
-                if (token.IsCancellationRequested) break;
-                var refs = await Executor.Execute(i, options.Reference, generator.Output, MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
-                if (token.IsCancellationRequested) break;
-                var sol = await Executor.Execute(i, options.Solution, generator.Output, MbBytes * options.MemoryLimit, (int) (options.TimeLimit * 1000), token);
+                var dataBuffer = new StringBuilder();
+                var solOutput = new StringBuilder();
+                var refOutput = new StringBuilder();
+
+                var gen = config.Generator.CreateCommand() | dataBuffer;
+
+                var genv = await gen.ExecuteJudge(config.Generator, _token);
+                genv.Output = dataBuffer.ToString();
+                
+                var sol = genv.Output | config.Solution.CreateCommand() | solOutput;
+                var refsol = genv.Output | config.Reference.CreateCommand() | refOutput;
+                
+                var k = await Task.WhenAll(
+                    sol.ExecuteJudge(config.Solution, _token),
+                    refsol.ExecuteJudge(config.Reference, _token));
+                
+                k[0].Output = solOutput.ToString();
+                k[1].Output = refOutput.ToString();
                 Results.Add(new CaseResult()
                 {
-                    g = generator,
-                    r = refs,
-                    s = sol
+                    g = genv,
+                    r = k[1],
+                    s = k[0]
                 });
             }
         }
@@ -74,10 +74,51 @@ namespace judge
         int cnt = 0;
         int ac = 0;
         int sumTime = 0;
-        long maxMem = 0;
+        double maxMem = 0;
         int maxTime = 0;
         public async Task JudgeSolution(int cases, int threads)
         {
+            for (int i = 0; i < config.PreJudgeCommands.Length; i++)
+            {
+                PrintColor($"Running Pre-Judge Command [{i+1}/{config.PreJudgeCommands.Length}]\n", ConsoleColor.Yellow);
+                var k = config.PreJudgeCommands[i];
+                var cmd = Cli.Wrap(k.Command)
+                    .WithArguments(k.Arguments)
+                    .WithWorkingDirectory(Environment.CurrentDirectory);
+                try
+                {
+                    if (config.ShowPreJudgeOutput)
+                    {
+                        await (cmd | Console.WriteLine).ExecuteAsync();
+                    }
+                    else
+                    {
+                        await cmd.ExecuteAsync();
+                    }
+                }
+                catch
+                {
+                    PrintColor($"Command returned error! [{i+1}/{config.PreJudgeCommands.Length}]\n", ConsoleColor.Yellow);
+                }
+
+            }
+            
+            if (!File.Exists(config.Generator.FileName))
+            {
+                Console.WriteLine("Generator file not found!");
+                return;
+            }
+            if (!File.Exists(config.Reference.FileName))
+            {
+                Console.WriteLine("Reference file not found!");
+                return;
+            }
+            if (!File.Exists(config.Solution.FileName))
+            {
+                Console.WriteLine("Solution file not found!");
+                return;
+            }
+            
             int cpt = (int) (cases / (double) threads);
             // Dw about this sketchy code lol
             for (int i = 0; i < threads - 1; i++)
@@ -88,7 +129,7 @@ namespace judge
 
             for (int i = 0; i < cases; i++)
             {
-                while (!token.IsCancellationRequested)
+                while (!_token.IsCancellationRequested)
                 {
                     if (Results.TryTake(out var k))
                     {
@@ -97,7 +138,7 @@ namespace judge
                         {
                             if (!CheckCase(i, k.g, k.s, k.r))
                             {
-                                if (options.ShortCircuit)
+                                if (config.ShortCircuit)
                                 {
                                     source.Cancel();
                                 }
@@ -108,7 +149,7 @@ namespace judge
                             }
                             break;
                         }
-                        catch (FileNotFoundException e)
+                        catch (FileNotFoundException)
                         {
                             source.Cancel();
                             break;
@@ -120,11 +161,11 @@ namespace judge
                     }
                 }
 
-                if (token.IsCancellationRequested) break;
+                if (_token.IsCancellationRequested) break;
             }
 
 
-            Console.WriteLine($"Resources: {sumTime/1000.0:#.###}s, {maxMem/MbBytes} MB\n" +
+            Console.WriteLine($"Resources: {sumTime/1000.0:#.###}s, {maxMem:#.###} MB\n" +
                               $"Maximum runtime on single test case: {maxTime/1000.0:#.###}s\n" +
                               $"Final score: {ac}/{cnt}\n");
         }
@@ -145,7 +186,11 @@ namespace judge
                     $"Reference Solution failed! Result: {refs.Result.ToString()}, Exit Code: {refs.ExitCode}");
                 throw new FileNotFoundException();
             }
-
+            
+            sumTime += sol.TimeMilliseconds;
+            maxTime = Math.Max(maxTime, sol.TimeMilliseconds);
+            maxMem = Math.Max(maxMem, sol.MemoryMb);
+            
             if (sol.Result != ExecutorResult.None)
             {
                 SaveData(i, generator.Output, refs.Output, sol.Output);
@@ -153,20 +198,16 @@ namespace judge
                 PrintStatus(sol.Result);
                 if (sol.ExitCode != 0)
                 {
-                    Console.WriteLine($" (exit code: {sol.ExitCode})");
+                    Console.Write($" (exit code: {sol.ExitCode})");
                 }
 
-                Console.WriteLine($" [{sol.TimeMilliseconds / 1000.0:#.###}s,{sol.MemoryBytes / MbBytes} MB]");
+                Console.WriteLine($" [{sol.TimeMilliseconds / 1000.0:#.###}s,{sol.MemoryMb:#.###} MB]");
                 return false;
             }
 
             if (_grader.Grade(new Sio(generator.Output), new Sio(refs.Output), new Sio(sol.Output)))
             {
                 sol.Result = ExecutorResult.AC;
-                if (options.ShowAc)
-                {
-                    SaveData(i, generator.Output, refs.Output, sol.Output);
-                }
             }
             else
             {
@@ -174,22 +215,26 @@ namespace judge
                 sol.Result = ExecutorResult.WA;
                 SaveData(i, generator.Output, refs.Output, sol.Output);
             }
-
-            sumTime += sol.TimeMilliseconds;
-            maxTime = Math.Max(maxTime, sol.TimeMilliseconds);
-            maxMem = Math.Max(maxMem, sol.MemoryBytes);
+            
             Console.Write($"Case #{i + 1}: ");
             PrintStatus(sol.Result);
             Console.WriteLine(
-                $" [{sol.TimeMilliseconds / 1000.0:#.###}s,{sol.MemoryBytes / MbBytes} MB] Ref [{refs.TimeMilliseconds / 1000.0:#.###}s,{refs.MemoryBytes / MbBytes} MB]");
+                $" [{sol.TimeMilliseconds / 1000.0:#.###}s,{sol.MemoryMb:#.###} MB] Ref [{refs.TimeMilliseconds / 1000.0:#.###}s,{refs.MemoryMb:#.###} MB]");
 
             return accepted;
         }
 
-        public void PrintStatus(ExecutorResult result)
+        public void PrintColor(string text, ConsoleColor color)
         {
             var cc = Console.ForegroundColor;
-            ConsoleColor nc = cc;
+            Console.ForegroundColor = color;
+            Console.Write(text);
+            Console.ForegroundColor = cc;
+        }
+        
+        public void PrintStatus(ExecutorResult result)
+        {
+            ConsoleColor nc = ConsoleColor.White;
             switch (result)
             {
                 case ExecutorResult.AC:
@@ -208,9 +253,7 @@ namespace judge
                     nc = ConsoleColor.DarkCyan;
                     break;
             }
-            Console.ForegroundColor = nc;
-            Console.Write(result.ToString());
-            Console.ForegroundColor = cc;
+            PrintColor(result.ToString(), nc);
         }
     }
 }

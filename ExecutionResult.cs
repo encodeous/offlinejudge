@@ -8,10 +8,9 @@ namespace judge
 {
     public class ExecutionResult
     {
-        public int Id;
         public string Output;
         public int TimeMilliseconds;
-        public long MemoryBytes;
+        public double MemoryMb;
         public ExecutorResult Result;
         public int ExitCode;
     }

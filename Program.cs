@@ -7,33 +7,16 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CommandLine;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace judge
 {
     [Verb("run", HelpText = "Run solutions")]
     public class JudgeOptions
     {
-        [Value(0, Required = true, HelpText = "Specify Generator Path, or command to run the Generator enclosed in quotations.")]
-        public string Generator { get; set; }
-        [Value(1, Required = true, HelpText = "Solution Path, or command to run the Solution enclosed in quotations.")]
-        public string Solution { get; set; }
-        [Value(2, Required = true, HelpText = "Reference Solution Path, or command to run the Reference Solution enclosed in quotations.")]
-        public string Reference { get; set; }
-
-        [Option('o', "output", HelpText = "Output cases as a file, and specify a path")]
-        public string Output { get; set; } = "";
-        [Option('a', "ac", HelpText = "Output AC cases along with WA cases", Default = false)]
-        public bool ShowAc { get; set; }
-        [Option('s', "shortcircuit", HelpText = "Short Circuit - Stop judging on non-AC", Default = false)]
-        public bool ShortCircuit { get; set; }
-        [Option('m',"mem", HelpText = "Memory Limit in Megabytes", Default = 512)]
-        public int MemoryLimit { get; set; }
-        [Option('t',"time", HelpText = "Time Limit in Seconds", Default = 2.0)]
-        public double TimeLimit { get; set; }
-        [Option('c',"cases", HelpText = "Cases", Default = 10)]
-        public int Cases { get; set; }
-        [Option('p',"parallel", HelpText = "Parallel Judging Threads", Default = 3)]
-        public int Threads { get; set; }
+        [Value(0, Required = false, HelpText = "Configuration File Path, defaults to current directory", Default = "judge.yaml")]
+        public string Config { get; set; }
     }
     [Verb("install", false, HelpText = "Install the application, and add the program to PATH")]
     public class InstallOptions
@@ -140,13 +123,95 @@ namespace judge
                 .WithParsed<JudgeOptions>(o =>
                 {
                     Console.CancelKeyPress += Console_CancelKeyPress;
-                    var j = new Judge(o, new ExactGrader(), cts.Token, cts);
-                    j.JudgeSolution(o.Cases, o.Threads).GetAwaiter().GetResult();
+                    Judge(o).GetAwaiter().GetResult();
                 });
+        }
+
+        private static async Task Judge(JudgeOptions o)
+        {
+            while (true)
+            {
+                cts = new CancellationTokenSource();
+                if (!File.Exists(o.Config))
+                {
+                    File.WriteAllText(o.Config, @"
+#
+# Offline Judge - Configuration File
+# https://github.com/encodeous/offlinejudge
+#
+
+# Commands that are run once before judging any cases
+pre-judge-commands:
+- command: cmd
+  arguments: --arguments here
+- command: cmd2
+  arguments: --arguments here
+# Should the output be shown?
+show-pre-judge-output: true
+# Should the judge stop judging with it hits a non-ac case? (The test data may get buried by cases in the console!)
+short-circuit: true
+# Number of cases the judge runs
+cases: 100
+# The max number of parallel executions that occur at any given time
+judge-threads: 3
+# Should the judge use an exact grader or a space-separated token grader?
+token-grader: false
+solution:
+  # Working directory for the executing process, leave blank for current directory
+  working-directory: 
+  # Filename or the full file path to the program
+  file-name: solution.exe
+  arguments: --arguments here
+  # Time limit in seconds
+  time-limit: 2.5
+  # Memory limit in MB
+  memory-limit: 512
+reference:
+  working-directory: 
+  file-name: reference.exe
+  arguments: --arguments here
+  time-limit: 2.5
+  memory-limit: 512
+generator:
+  working-directory: 
+  file-name: generator.exe
+  arguments: --arguments here
+  time-limit: 10
+  memory-limit: 1024
+");
+                    Console.WriteLine("No configuration file found! Creating default configuration...");
+                    return;
+                }
+
+                var deserializer = new DeserializerBuilder()
+                    .WithNamingConvention(HyphenatedNamingConvention.Instance)
+                    .Build();
+
+                var cfg = deserializer.Deserialize<JudgeConfig>(File.ReadAllText(o.Config));
+
+                if (cfg.TokenGrader)
+                {
+                    var j = new Judge(cfg, new TokenGrader(), cts.Token, cts);
+                    await j.JudgeSolution(cfg.Cases, cfg.JudgeThreads);
+                }
+                else
+                {
+                    var j = new Judge(cfg, new ExactGrader(), cts.Token, cts);
+                    await j.JudgeSolution(cfg.Cases, cfg.JudgeThreads);
+                }
+
+                Console.WriteLine("Enter 'r' to rejudge, press any other key to exit!");
+                var k = Console.ReadKey();
+                if (k.Key != ConsoleKey.R)
+                {
+                    break;
+                }
+            }
         }
 
         private static void Console_CancelKeyPress(object sender, ConsoleCancelEventArgs e)
         {
+            Console.WriteLine("Halting Judges...");
             e.Cancel = true;
             cts.Cancel();
         }
