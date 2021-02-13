@@ -8,7 +8,7 @@ This is a common technique used in contests to validate the accuracy of a soluti
 
 ### Before Starting:
 
-1. OJ requires `dotnetcore 3.1` to be installed, install [dotnet](https://dotnet.microsoft.com/download) if it is not installed already!
+1. OJ requires `dotnet 5` to be installed, install [dotnet](https://dotnet.microsoft.com/download) if it is not installed already!
 2. Make sure you have a compiler that can run your desired solution
 3. Download ([Github Releases](https://github.com/encodeous/offlinejudge/releases)) and set up Judge!
 
