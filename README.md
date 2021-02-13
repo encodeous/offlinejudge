@@ -10,6 +10,7 @@ This is a common technique used in contests to validate the accuracy of a soluti
 
 1. OJ requires `dotnetcore 3.1` to be installed, install [dotnet](https://dotnet.microsoft.com/download) if it is not installed already!
 2. Make sure you have a compiler that can run your desired solution
+3. Download ([Github Releases](https://github.com/encodeous/offlinejudge/releases)) and set up Judge!
 
 ### Setting Up: 
 
@@ -18,6 +19,19 @@ This is a common technique used in contests to validate the accuracy of a soluti
 - Create a `judge.yaml`, an example is shown below.
 - Modify the configuration to your heart's content.
 - To run the judge, open a terminal and execute `judge run`. Make sure the current working directory contains a `judge.yaml`, or specify the path to `judge.yaml` with `judge run <configuration file path>`
+
+## Features
+
+- Pre-judge commands - used for compilation, cleanup etc
+- Independent resource limits for `[solution, reference, generator]`
+- Parallel Judging - Allows for faster judging
+- Short Circuit - Stops execution when a non-ac case is found
+- Pretty printing - Nicely formatted judging results, similar to the format used on dmoj.ca
+- Token/Exact grading - Able to switch between Exact grading and Tokenized Grading (separated by `\n` or space)
+
+### Version Compatibility
+
+In future versions, old configuration files may **not** be compatible with older versions!
 
 ### Example Configuration
 
