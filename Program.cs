@@ -210,7 +210,7 @@ generator:
                     var j = new Judge(cfg, new ExactGrader(), cts.Token, cts);
                     await j.JudgeSolution(cfg.Cases, cfg.JudgeThreads);
                 }
-
+                cts.Cancel();
                 Console.WriteLine("Enter 'r' to rejudge, press any other key to exit!");
                 var k = Console.ReadKey();
                 if (k.Key != ConsoleKey.R)
@@ -222,6 +222,10 @@ generator:
 
         private static void Console_CancelKeyPress(object sender, ConsoleCancelEventArgs e)
         {
+            if (cts.IsCancellationRequested)
+            {
+                Environment.Exit(0);
+            }
             Console.WriteLine("Halting Judges...");
             e.Cancel = true;
             cts.Cancel();
