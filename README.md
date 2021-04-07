@@ -31,7 +31,7 @@ This is a common technique used in contests to validate the accuracy of a soluti
 
 ### Version Compatibility
 
-In future versions, old configuration files may **not** be compatible with older versions!
+Configuration files are **not** version compatible!
 
 ### Example Configuration
 
